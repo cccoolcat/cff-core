@@ -6,7 +6,8 @@ import (
 	"io"
 	"net"
 
-	"github.com/Dreamacro/clash/common/pool"
+	N "github.com/metacubex/mihomo/common/net"
+	"github.com/metacubex/mihomo/common/pool"
 )
 
 // ErrShortPacket means the packet is too short to be a valid encrypted packet.
@@ -28,6 +29,18 @@ func Pack(dst, plaintext []byte, s Cipher) ([]byte, error) {
 	return dst[:len(iv)+len(plaintext)], nil
 }
 
+// UnpackInplace decrypts pkt using stream cipher s.
+// Returns a slice of pkt containing decrypted plaintext.
+// Note: The data in the input dst will be changed
+func UnpackInplace(pkt []byte, s Cipher) ([]byte, error) {
+	if len(pkt) < s.IVSize() {
+		return nil, ErrShortPacket
+	}
+	iv, dst := pkt[:s.IVSize()], pkt[s.IVSize():]
+	s.Decrypter(iv).XORKeyStream(dst, dst)
+	return dst, nil
+}
+
 // Unpack decrypts pkt using stream cipher s.
 // Returns a slice of dst containing decrypted plaintext.
 func Unpack(dst, pkt []byte, s Cipher) ([]byte, error) {
@@ -43,13 +56,13 @@ func Unpack(dst, pkt []byte, s Cipher) ([]byte, error) {
 }
 
 type PacketConn struct {
-	net.PacketConn
+	N.EnhancePacketConn
 	Cipher
 }
 
-// NewPacketConn wraps a net.PacketConn with stream cipher encryption/decryption.
-func NewPacketConn(c net.PacketConn, ciph Cipher) *PacketConn {
-	return &PacketConn{PacketConn: c, Cipher: ciph}
+// NewPacketConn wraps an N.EnhancePacketConn with stream cipher encryption/decryption.
+func NewPacketConn(c N.EnhancePacketConn, ciph Cipher) *PacketConn {
+	return &PacketConn{EnhancePacketConn: c, Cipher: ciph}
 }
 
 const maxPacketSize = 64 * 1024
@@ -61,19 +74,36 @@ func (c *PacketConn) WriteTo(b []byte, addr net.Addr) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	_, err = c.PacketConn.WriteTo(buf, addr)
+	_, err = c.EnhancePacketConn.WriteTo(buf, addr)
 	return len(b), err
 }
 
 func (c *PacketConn) ReadFrom(b []byte) (int, net.Addr, error) {
-	n, addr, err := c.PacketConn.ReadFrom(b)
+	n, addr, err := c.EnhancePacketConn.ReadFrom(b)
 	if err != nil {
 		return n, addr, err
 	}
-	bb, err := Unpack(b[c.IVSize():], b[:n], c.Cipher)
+	bb, err := UnpackInplace(b[:n], c.Cipher)
 	if err != nil {
 		return n, addr, err
 	}
 	copy(b, bb)
 	return len(bb), addr, err
+}
+
+func (c *PacketConn) WaitReadFrom() (data []byte, put func(), addr net.Addr, err error) {
+	data, put, addr, err = c.EnhancePacketConn.WaitReadFrom()
+	if err != nil {
+		return
+	}
+	data, err = UnpackInplace(data, c.Cipher)
+	if err != nil {
+		if put != nil {
+			put()
+		}
+		data = nil
+		put = nil
+		return
+	}
+	return
 }

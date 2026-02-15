@@ -1,8 +1,11 @@
 package context
 
 import (
+	"context"
+
+	"github.com/metacubex/mihomo/common/utils"
+
 	"github.com/gofrs/uuid/v5"
-	"github.com/miekg/dns"
 )
 
 const (
@@ -12,16 +15,17 @@ const (
 )
 
 type DNSContext struct {
-	id  uuid.UUID
-	msg *dns.Msg
-	tp  string
+	context.Context
+
+	id uuid.UUID
+	tp string
 }
 
-func NewDNSContext(msg *dns.Msg) *DNSContext {
-	id, _ := uuid.NewV4()
+func NewDNSContext(ctx context.Context) *DNSContext {
 	return &DNSContext{
-		id:  id,
-		msg: msg,
+		Context: ctx,
+
+		id: utils.NewUUIDV4(),
 	}
 }
 

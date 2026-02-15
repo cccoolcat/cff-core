@@ -1,22 +1,17 @@
 package trojan
 
 import (
-	"context"
 	"crypto/sha256"
-	"crypto/tls"
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"io"
 	"net"
-	"net/http"
 	"sync"
 
-	C "github.com/Dreamacro/clash/constant"
-	"github.com/Dreamacro/clash/transport/socks5"
-	"github.com/Dreamacro/clash/transport/vmess"
-
-	"github.com/Dreamacro/protobytes"
+	N "github.com/metacubex/mihomo/common/net"
+	"github.com/metacubex/mihomo/common/pool"
+	"github.com/metacubex/mihomo/transport/socks5"
 )
 
 const (
@@ -25,111 +20,46 @@ const (
 )
 
 var (
-	defaultALPN          = []string{"h2", "http/1.1"}
-	defaultWebsocketALPN = []string{"http/1.1"}
+	DefaultALPN          = []string{"h2", "http/1.1"}
+	DefaultWebsocketALPN = []string{"http/1.1"}
 
 	crlf = []byte{'\r', '\n'}
 )
 
 type Command = byte
 
-var (
+const (
 	CommandTCP byte = 1
 	CommandUDP byte = 3
+	CommandMux byte = 0x7f
+
+	KeyLength = 56
 )
 
-type Option struct {
-	Password       string
-	ALPN           []string
-	ServerName     string
-	SkipCertVerify bool
-}
+func WriteHeader(w io.Writer, hexPassword [KeyLength]byte, command Command, socks5Addr []byte) error {
+	buf := pool.GetBuffer()
+	defer pool.PutBuffer(buf)
 
-type WebsocketOption struct {
-	Host    string
-	Port    string
-	Path    string
-	Headers http.Header
-}
+	buf.Write(hexPassword[:])
+	buf.Write(crlf)
 
-type Trojan struct {
-	option      *Option
-	hexPassword []byte
-}
-
-func (t *Trojan) StreamConn(conn net.Conn) (net.Conn, error) {
-	alpn := defaultALPN
-	if len(t.option.ALPN) != 0 {
-		alpn = t.option.ALPN
-	}
-
-	tlsConfig := &tls.Config{
-		NextProtos:         alpn,
-		MinVersion:         tls.VersionTLS12,
-		InsecureSkipVerify: t.option.SkipCertVerify,
-		ServerName:         t.option.ServerName,
-	}
-
-	tlsConn := tls.Client(conn, tlsConfig)
-
-	// fix tls handshake not timeout
-	ctx, cancel := context.WithTimeout(context.Background(), C.DefaultTLSTimeout)
-	defer cancel()
-	if err := tlsConn.HandshakeContext(ctx); err != nil {
-		return nil, err
-	}
-
-	return tlsConn, nil
-}
-
-func (t *Trojan) StreamWebsocketConn(conn net.Conn, wsOptions *WebsocketOption) (net.Conn, error) {
-	alpn := defaultWebsocketALPN
-	if len(t.option.ALPN) != 0 {
-		alpn = t.option.ALPN
-	}
-
-	tlsConfig := &tls.Config{
-		NextProtos:         alpn,
-		MinVersion:         tls.VersionTLS12,
-		InsecureSkipVerify: t.option.SkipCertVerify,
-		ServerName:         t.option.ServerName,
-	}
-
-	return vmess.StreamWebsocketConn(conn, &vmess.WebsocketConfig{
-		Host:      wsOptions.Host,
-		Port:      wsOptions.Port,
-		Path:      wsOptions.Path,
-		Headers:   wsOptions.Headers,
-		TLS:       true,
-		TLSConfig: tlsConfig,
-	})
-}
-
-func (t *Trojan) WriteHeader(w io.Writer, command Command, socks5Addr []byte) error {
-	buf := protobytes.BytesWriter{}
-	buf.PutSlice(t.hexPassword)
-	buf.PutSlice(crlf)
-
-	buf.PutUint8(command)
-	buf.PutSlice(socks5Addr)
-	buf.PutSlice(crlf)
+	buf.WriteByte(command)
+	buf.Write(socks5Addr)
+	buf.Write(crlf)
 
 	_, err := w.Write(buf.Bytes())
 	return err
 }
 
-func (t *Trojan) PacketConn(conn net.Conn) net.PacketConn {
-	return &PacketConn{
-		Conn: conn,
-	}
-}
-
 func writePacket(w io.Writer, socks5Addr, payload []byte) (int, error) {
-	buf := protobytes.BytesWriter{}
-	buf.PutSlice(socks5Addr)
-	buf.PutUint16be(uint16(len(payload)))
-	buf.PutSlice(crlf)
-	buf.PutSlice(payload)
+	buf := pool.GetBuffer()
+	defer pool.PutBuffer(buf)
+
+	buf.Write(socks5Addr)
+	binary.Write(buf, binary.BigEndian, uint16(len(payload)))
+	buf.Write(crlf)
+	buf.Write(payload)
+
 	return w.Write(buf.Bytes())
 }
 
@@ -196,9 +126,7 @@ func ReadPacket(r io.Reader, payload []byte) (net.Addr, int, int, error) {
 	return uAddr, length, total - length, nil
 }
 
-func New(option *Option) *Trojan {
-	return &Trojan{option, hexSha224([]byte(option.Password))}
-}
+var _ N.EnhancePacketConn = (*PacketConn)(nil)
 
 type PacketConn struct {
 	net.Conn
@@ -208,7 +136,7 @@ type PacketConn struct {
 }
 
 func (pc *PacketConn) WriteTo(b []byte, addr net.Addr) (int, error) {
-	return WritePacket(pc, socks5.ParseAddr(addr.String()), b)
+	return WritePacket(pc, socks5.ParseAddrToSocksAddr(addr), b)
 }
 
 func (pc *PacketConn) ReadFrom(b []byte) (int, net.Addr, error) {
@@ -247,10 +175,59 @@ func (pc *PacketConn) ReadFrom(b []byte) (int, net.Addr, error) {
 	return n, addr, nil
 }
 
-func hexSha224(data []byte) []byte {
-	buf := make([]byte, 56)
-	hash := sha256.New224()
-	hash.Write(data)
-	hex.Encode(buf, hash.Sum(nil))
-	return buf
+func (pc *PacketConn) WaitReadFrom() (data []byte, put func(), addr net.Addr, err error) {
+	pc.mux.Lock()
+	defer pc.mux.Unlock()
+
+	destination, err := socks5.ReadAddr0(pc.Conn)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	udpAddr := destination.UDPAddr()
+	if udpAddr == nil {
+		return nil, nil, nil, errors.New("parse addr error")
+	}
+	addr = udpAddr
+
+	data = pool.Get(pool.UDPBufferSize)
+	put = func() {
+		_ = pool.Put(data)
+	}
+
+	_, err = io.ReadFull(pc.Conn, data[:2+2]) // u16be length + CR LF
+	if err != nil {
+		if put != nil {
+			put()
+		}
+		return nil, nil, nil, err
+	}
+	length := binary.BigEndian.Uint16(data)
+
+	if length > 0 {
+		data = data[:length]
+		_, err = io.ReadFull(pc.Conn, data)
+		if err != nil {
+			if put != nil {
+				put()
+			}
+			return nil, nil, nil, err
+		}
+	} else {
+		if put != nil {
+			put()
+		}
+		return nil, nil, addr, nil
+	}
+
+	return
+}
+
+func NewPacketConn(conn net.Conn) *PacketConn {
+	return &PacketConn{Conn: conn}
+}
+
+func Key(password string) (key [56]byte) {
+	hash := sha256.Sum224([]byte(password))
+	hex.Encode(key[:], hash[:])
+	return
 }

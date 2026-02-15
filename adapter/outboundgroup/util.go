@@ -1,50 +1,34 @@
 package outboundgroup
 
 import (
-	"fmt"
-	"net"
-	"strconv"
-	"time"
+	"context"
 
-	C "github.com/Dreamacro/clash/constant"
+	"github.com/metacubex/mihomo/common/utils"
+	C "github.com/metacubex/mihomo/constant"
+	P "github.com/metacubex/mihomo/constant/provider"
 )
 
-func addrToMetadata(rawAddress string) (addr *C.Metadata, err error) {
-	host, port, err := net.SplitHostPort(rawAddress)
-	if err != nil {
-		err = fmt.Errorf("addrToMetadata failed: %w", err)
-		return
-	}
+type ProxyGroup interface {
+	C.ProxyAdapter
 
-	ip := net.ParseIP(host)
-	p, _ := strconv.ParseUint(port, 10, 16)
-	if ip == nil {
-		addr = &C.Metadata{
-			Host:    host,
-			DstIP:   nil,
-			DstPort: C.Port(p),
-		}
-		return
-	} else if ip4 := ip.To4(); ip4 != nil {
-		addr = &C.Metadata{
-			Host:    "",
-			DstIP:   ip4,
-			DstPort: C.Port(p),
-		}
-		return
-	}
+	Providers() []P.ProxyProvider
+	Proxies() []C.Proxy
+	Now() string
+	Touch()
 
-	addr = &C.Metadata{
-		Host:    "",
-		DstIP:   ip,
-		DstPort: C.Port(p),
-	}
-	return
+	URLTest(ctx context.Context, url string, expectedStatus utils.IntRanges[uint16]) (mp map[string]uint16, err error)
 }
 
-func tcpKeepAlive(c net.Conn) {
-	if tcp, ok := c.(*net.TCPConn); ok {
-		tcp.SetKeepAlive(true)
-		tcp.SetKeepAlivePeriod(30 * time.Second)
-	}
+var _ ProxyGroup = (*Fallback)(nil)
+var _ ProxyGroup = (*LoadBalance)(nil)
+var _ ProxyGroup = (*URLTest)(nil)
+var _ ProxyGroup = (*Selector)(nil)
+
+type SelectAble interface {
+	Set(string) error
+	ForceSet(name string)
 }
+
+var _ SelectAble = (*Fallback)(nil)
+var _ SelectAble = (*URLTest)(nil)
+var _ SelectAble = (*Selector)(nil)

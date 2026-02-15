@@ -5,59 +5,64 @@ import (
 	"time"
 )
 
-type call struct {
+type call[T any] struct {
 	wg  sync.WaitGroup
-	val any
+	val T
 	err error
 }
 
-type Single struct {
+type Single[T any] struct {
 	mux    sync.Mutex
-	last   time.Time
 	wait   time.Duration
-	call   *call
-	result *Result
+	call   *call[T]
+	result *Result[T]
 }
 
-type Result struct {
-	Val any
-	Err error
+type Result[T any] struct {
+	Val  T
+	Err  error
+	Time time.Time
 }
 
 // Do single.Do likes sync.singleFlight
-func (s *Single) Do(fn func() (any, error)) (v any, err error, shared bool) {
+func (s *Single[T]) Do(fn func() (T, error)) (v T, err error, shared bool) {
 	s.mux.Lock()
-	now := time.Now()
-	if now.Before(s.last.Add(s.wait)) {
+	result := s.result
+	if result != nil && time.Since(result.Time) < s.wait {
 		s.mux.Unlock()
-		return s.result.Val, s.result.Err, true
+		return result.Val, result.Err, true
+	}
+	s.result = nil // The result has expired, clear it
+
+	if callM := s.call; callM != nil {
+		s.mux.Unlock()
+		callM.wg.Wait()
+		return callM.val, callM.err, true
 	}
 
-	if call := s.call; call != nil {
-		s.mux.Unlock()
-		call.wg.Wait()
-		return call.val, call.err, true
-	}
-
-	call := &call{}
-	call.wg.Add(1)
-	s.call = call
+	callM := &call[T]{}
+	callM.wg.Add(1)
+	s.call = callM
 	s.mux.Unlock()
-	call.val, call.err = fn()
-	call.wg.Done()
+	callM.val, callM.err = fn()
+	callM.wg.Done()
 
+	s.mux.Lock()
+	if s.call == callM { // maybe reset when fn is running
+		s.call = nil
+		s.result = &Result[T]{callM.val, callM.err, time.Now()}
+	}
+	s.mux.Unlock()
+	return callM.val, callM.err, false
+}
+
+func (s *Single[T]) Reset() {
 	s.mux.Lock()
 	s.call = nil
-	s.result = &Result{call.val, call.err}
-	s.last = now
+	s.result = nil
 	s.mux.Unlock()
-	return call.val, call.err, false
 }
 
-func (s *Single) Reset() {
-	s.last = time.Time{}
-}
-
-func NewSingle(wait time.Duration) *Single {
-	return &Single{wait: wait}
+func NewSingle[T any](wait time.Duration) *Single[T] {
+	return &Single[T]{wait: wait}
 }

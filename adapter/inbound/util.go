@@ -1,15 +1,14 @@
 package inbound
 
 import (
-	"fmt"
 	"net"
-	"net/http"
-	"strconv"
+	"net/netip"
 	"strings"
 
-	"github.com/Dreamacro/clash/common/util"
-	C "github.com/Dreamacro/clash/constant"
-	"github.com/Dreamacro/clash/transport/socks5"
+	C "github.com/metacubex/mihomo/constant"
+	"github.com/metacubex/mihomo/transport/socks5"
+
+	"github.com/metacubex/http"
 )
 
 func parseSocksAddr(target socks5.Addr) *C.Metadata {
@@ -19,48 +18,46 @@ func parseSocksAddr(target socks5.Addr) *C.Metadata {
 	case socks5.AtypDomainName:
 		// trim for FQDN
 		metadata.Host = strings.TrimRight(string(target[2:2+target[1]]), ".")
-		metadata.DstPort = C.Port((int(target[2+target[1]]) << 8) | int(target[2+target[1]+1]))
+		metadata.DstPort = uint16((int(target[2+target[1]]) << 8) | int(target[2+target[1]+1]))
 	case socks5.AtypIPv4:
-		ip := net.IP(target[1 : 1+net.IPv4len])
-		metadata.DstIP = ip
-		metadata.DstPort = C.Port((int(target[1+net.IPv4len]) << 8) | int(target[1+net.IPv4len+1]))
+		metadata.DstIP, _ = netip.AddrFromSlice(target[1 : 1+net.IPv4len])
+		metadata.DstPort = uint16((int(target[1+net.IPv4len]) << 8) | int(target[1+net.IPv4len+1]))
 	case socks5.AtypIPv6:
-		ip := net.IP(target[1 : 1+net.IPv6len])
-		metadata.DstIP = ip
-		metadata.DstPort = C.Port((int(target[1+net.IPv6len]) << 8) | int(target[1+net.IPv6len+1]))
+		metadata.DstIP, _ = netip.AddrFromSlice(target[1 : 1+net.IPv6len])
+		metadata.DstPort = uint16((int(target[1+net.IPv6len]) << 8) | int(target[1+net.IPv6len+1]))
 	}
+	metadata.DstIP = metadata.DstIP.Unmap()
 
 	return metadata
 }
 
 func parseHTTPAddr(request *http.Request) *C.Metadata {
 	host := request.URL.Hostname()
-	port, _ := strconv.ParseUint(util.EmptyOr(request.URL.Port(), "80"), 10, 16)
+	port := request.URL.Port()
+	if port == "" {
+		port = "80"
+	}
 
 	// trim FQDN (#737)
 	host = strings.TrimRight(host, ".")
 
-	metadata := &C.Metadata{
-		NetWork: C.TCP,
-		Host:    host,
-		DstIP:   nil,
-		DstPort: C.Port(port),
-	}
-
-	if ip := net.ParseIP(host); ip != nil {
-		metadata.DstIP = ip
-	}
-
+	metadata := &C.Metadata{}
+	_ = metadata.SetRemoteAddress(net.JoinHostPort(host, port))
 	return metadata
 }
 
-func parseAddr(addr net.Addr) (net.IP, int, error) {
-	switch a := addr.(type) {
-	case *net.TCPAddr:
-		return a.IP, a.Port, nil
-	case *net.UDPAddr:
-		return a.IP, a.Port, nil
-	default:
-		return nil, 0, fmt.Errorf("unknown address type %s", addr.String())
+func prefixesContains(prefixes []netip.Prefix, addr netip.Addr) bool {
+	if len(prefixes) == 0 {
+		return false
 	}
+	if !addr.IsValid() {
+		return false
+	}
+	addr = addr.Unmap().WithZone("") // netip.Prefix.Contains returns false if ip has an IPv6 zone
+	for _, prefix := range prefixes {
+		if prefix.Contains(addr) {
+			return true
+		}
+	}
+	return false
 }

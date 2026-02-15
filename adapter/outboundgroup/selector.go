@@ -5,24 +5,22 @@ import (
 	"encoding/json"
 	"errors"
 
-	"github.com/Dreamacro/clash/adapter/outbound"
-	"github.com/Dreamacro/clash/common/singledo"
-	"github.com/Dreamacro/clash/component/dialer"
-	C "github.com/Dreamacro/clash/constant"
-	"github.com/Dreamacro/clash/constant/provider"
+	C "github.com/metacubex/mihomo/constant"
+	P "github.com/metacubex/mihomo/constant/provider"
 )
 
 type Selector struct {
-	*outbound.Base
+	*GroupBase
 	disableUDP bool
-	single     *singledo.Single
 	selected   string
-	providers  []provider.ProxyProvider
+	testUrl    string
+	Hidden     bool
+	Icon       string
 }
 
 // DialContext implements C.ProxyAdapter
-func (s *Selector) DialContext(ctx context.Context, metadata *C.Metadata, opts ...dialer.Option) (C.Conn, error) {
-	c, err := s.selectedProxy(true).DialContext(ctx, metadata, s.Base.DialOptions(opts...)...)
+func (s *Selector) DialContext(ctx context.Context, metadata *C.Metadata) (C.Conn, error) {
+	c, err := s.selectedProxy(true).DialContext(ctx, metadata)
 	if err == nil {
 		c.AppendToChains(s)
 	}
@@ -30,8 +28,8 @@ func (s *Selector) DialContext(ctx context.Context, metadata *C.Metadata, opts .
 }
 
 // ListenPacketContext implements C.ProxyAdapter
-func (s *Selector) ListenPacketContext(ctx context.Context, metadata *C.Metadata, opts ...dialer.Option) (C.PacketConn, error) {
-	pc, err := s.selectedProxy(true).ListenPacketContext(ctx, metadata, s.Base.DialOptions(opts...)...)
+func (s *Selector) ListenPacketContext(ctx context.Context, metadata *C.Metadata) (C.PacketConn, error) {
+	pc, err := s.selectedProxy(true).ListenPacketContext(ctx, metadata)
 	if err == nil {
 		pc.AppendToChains(s)
 	}
@@ -47,17 +45,31 @@ func (s *Selector) SupportUDP() bool {
 	return s.selectedProxy(false).SupportUDP()
 }
 
+// IsL3Protocol implements C.ProxyAdapter
+func (s *Selector) IsL3Protocol(metadata *C.Metadata) bool {
+	return s.selectedProxy(false).IsL3Protocol(metadata)
+}
+
 // MarshalJSON implements C.ProxyAdapter
 func (s *Selector) MarshalJSON() ([]byte, error) {
-	var all []string
-	for _, proxy := range getProvidersProxies(s.providers, false) {
+	all := []string{}
+	for _, proxy := range s.GetProxies(false) {
 		all = append(all, proxy.Name())
+	}
+	// When testurl is the default value
+	// do not append a value to ensure that the web dashboard follows the settings of the dashboard
+	var url string
+	if s.testUrl != C.DefaultTestURL {
+		url = s.testUrl
 	}
 
 	return json.Marshal(map[string]any{
-		"type": s.Type().String(),
-		"now":  s.Now(),
-		"all":  all,
+		"type":    s.Type().String(),
+		"now":     s.Now(),
+		"all":     all,
+		"testUrl": url,
+		"hidden":  s.Hidden,
+		"icon":    s.Icon,
 	})
 }
 
@@ -66,10 +78,9 @@ func (s *Selector) Now() string {
 }
 
 func (s *Selector) Set(name string) error {
-	for _, proxy := range getProvidersProxies(s.providers, false) {
+	for _, proxy := range s.GetProxies(false) {
 		if proxy.Name() == name {
 			s.selected = name
-			s.single.Reset()
 			return nil
 		}
 	}
@@ -77,38 +88,50 @@ func (s *Selector) Set(name string) error {
 	return errors.New("proxy not exist")
 }
 
+func (s *Selector) ForceSet(name string) {
+	s.selected = name
+}
+
 // Unwrap implements C.ProxyAdapter
-func (s *Selector) Unwrap(metadata *C.Metadata) C.Proxy {
-	return s.selectedProxy(true)
+func (s *Selector) Unwrap(metadata *C.Metadata, touch bool) C.Proxy {
+	return s.selectedProxy(touch)
 }
 
 func (s *Selector) selectedProxy(touch bool) C.Proxy {
-	elm, _, _ := s.single.Do(func() (any, error) {
-		proxies := getProvidersProxies(s.providers, touch)
-		for _, proxy := range proxies {
-			if proxy.Name() == s.selected {
-				return proxy, nil
-			}
+	proxies := s.GetProxies(touch)
+	for _, proxy := range proxies {
+		if proxy.Name() == s.selected {
+			return proxy
 		}
+	}
 
-		return proxies[0], nil
-	})
-
-	return elm.(C.Proxy)
+	return proxies[0]
 }
 
-func NewSelector(option *GroupCommonOption, providers []provider.ProxyProvider) *Selector {
-	selected := providers[0].Proxies()[0].Name()
+func (s *Selector) Providers() []P.ProxyProvider {
+	return s.providers
+}
+
+func (s *Selector) Proxies() []C.Proxy {
+	return s.GetProxies(false)
+}
+
+func NewSelector(option *GroupCommonOption, providers []P.ProxyProvider) *Selector {
 	return &Selector{
-		Base: outbound.NewBase(outbound.BaseOption{
-			Name:        option.Name,
-			Type:        C.Selector,
-			Interface:   option.Interface,
-			RoutingMark: option.RoutingMark,
+		GroupBase: NewGroupBase(GroupBaseOption{
+			Name:           option.Name,
+			Type:           C.Selector,
+			Filter:         option.Filter,
+			ExcludeFilter:  option.ExcludeFilter,
+			ExcludeType:    option.ExcludeType,
+			TestTimeout:    option.TestTimeout,
+			MaxFailedTimes: option.MaxFailedTimes,
+			Providers:      providers,
 		}),
-		single:     singledo.NewSingle(defaultGetProxiesDuration),
-		providers:  providers,
-		selected:   selected,
+		selected:   "COMPATIBLE",
 		disableUDP: option.DisableUDP,
+		testUrl:    option.URL,
+		Hidden:     option.Hidden,
+		Icon:       option.Icon,
 	}
 }

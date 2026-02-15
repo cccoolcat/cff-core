@@ -2,11 +2,15 @@ package main
 
 import "C"
 import (
-	"github.com/Dreamacro/clash/constant"
-	"github.com/Dreamacro/clash/hub/executor"
-	"github.com/Dreamacro/clash/hub/route"
-	"github.com/Dreamacro/clash/log"
-	"github.com/oschwald/geoip2-golang"
+	"encoding/json"
+	"github.com/metacubex/mihomo/component/mmdb"
+	"github.com/metacubex/mihomo/constant"
+	"github.com/metacubex/mihomo/hub/executor"
+	"github.com/metacubex/mihomo/hub/route"
+	"github.com/metacubex/mihomo/listener"
+	"github.com/metacubex/mihomo/log"
+	"github.com/metacubex/mihomo/tunnel"
+	"github.com/metacubex/mihomo/tunnel/statistic"
 	"go.uber.org/automaxprocs/maxprocs"
 	"os"
 	"path/filepath"
@@ -24,11 +28,11 @@ func SetHomeDir(homeStr *C.char) bool {
 	homeDir := C.GoString(homeStr)
 	info, err := os.Stat(homeDir)
 	if err != nil {
-		log.Errorln("[Clash Lib] SetHomeDir: %s : %+v", homeDir, err)
+		log.Errorln("[CFF Lib] SetHomeDir: %s : %+v", homeDir, err)
 		return false
 	}
 	if !info.IsDir() {
-		log.Errorln("[Clash Lib] SetHomeDir: Path is not directory %s", homeDir)
+		log.Errorln("[CFF Lib] SetHomeDir: Path is not directory %s", homeDir)
 		return false
 	}
 	constant.SetHomeDir(homeDir)
@@ -50,21 +54,15 @@ func SetConfig(configStr *C.char) bool {
 
 //export VerifyMMDB
 func VerifyMMDB(path *C.char) bool {
-	instance, err := geoip2.Open(C.GoString(path))
-	if err == nil {
-		_ = instance.Close()
-	}
-	return err == nil
+	return mmdb.Verify(C.GoString(path))
 }
 
 //export StartRust
 func StartRust(addr *C.char) *C.char {
-	go route.Start(C.GoString(addr), "")
-	oldAddr := route.GetAddr()
-	if oldAddr == "" {
-		return addr
-	}
-	return C.CString(oldAddr)
+	route.ReCreateServer(&route.Config{
+		Addr: C.GoString(addr),
+	})
+	return addr
 }
 
 //export StartService
@@ -80,13 +78,103 @@ func StartService() bool {
 
 	cfg, err := executor.Parse()
 	if err != nil {
-		log.Errorln("[Clash Lib] StartService: Parse config error: %+v", err)
+		log.Errorln("[CFF Lib] StartService: Parse config error: %+v", err)
 		return status
 	}
 	executor.ApplyConfig(cfg, true)
 
 	status = true
 	return status
+}
+
+//export StopService
+func StopService() {
+	listener.Cleanup()
+	status = false
+}
+
+//export IsRunning
+func IsRunning() bool {
+	return status
+}
+
+//export ReloadConfig
+func ReloadConfig() bool {
+	cfg, err := executor.Parse()
+	if err != nil {
+		log.Errorln("[CFF Lib] ReloadConfig: Parse error: %+v", err)
+		return false
+	}
+	executor.ApplyConfig(cfg, false)
+	return true
+}
+
+//export UpdateConfig
+func UpdateConfig(configStr *C.char) bool {
+	configFile := C.GoString(configStr)
+	if configFile == "" {
+		return false
+	}
+	if !filepath.IsAbs(configFile) {
+		configFile = filepath.Join(constant.Path.HomeDir(), configFile)
+	}
+	constant.SetConfig(configFile)
+	return ReloadConfig()
+}
+
+//export GetTrafficNow
+func GetTrafficNow() *C.char {
+	up, down := statistic.DefaultManager.Now()
+	data, _ := json.Marshal(map[string]int64{"up": up, "down": down})
+	return C.CString(string(data))
+}
+
+//export GetTrafficTotal
+func GetTrafficTotal() *C.char {
+	up, down := statistic.DefaultManager.Total()
+	data, _ := json.Marshal(map[string]int64{"up": up, "down": down})
+	return C.CString(string(data))
+}
+
+//export ResetTraffic
+func ResetTraffic() {
+	statistic.DefaultManager.ResetStatistic()
+}
+
+//export GetMode
+func GetMode() *C.char {
+	return C.CString(tunnel.Mode().String())
+}
+
+//export SetMode
+func SetMode(modeStr *C.char) bool {
+	mode := C.GoString(modeStr)
+	switch mode {
+	case "rule":
+		tunnel.SetMode(tunnel.Rule)
+	case "global":
+		tunnel.SetMode(tunnel.Global)
+	case "direct":
+		tunnel.SetMode(tunnel.Direct)
+	default:
+		return false
+	}
+	return true
+}
+
+//export CloseAllConnections
+func CloseAllConnections() {
+	statistic.DefaultManager.Range(func(c statistic.Tracker) bool {
+		_ = c.Close()
+		return true
+	})
+}
+
+//export GetConfig
+func GetConfig() *C.char {
+	general := executor.GetGeneral()
+	data, _ := json.Marshal(general)
+	return C.CString(string(data))
 }
 
 func main() {}
