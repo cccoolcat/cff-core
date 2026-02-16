@@ -115,7 +115,7 @@ jobs:
           overwrite: true
 
   build-darwin-amd64:
-    runs-on: macos-13
+    runs-on: macos-latest
     needs: [ get-release ]
     steps:
       - uses: actions/checkout@v4
@@ -127,7 +127,7 @@ jobs:
           VERSION: ${{ needs.get-release.outputs.tag_name }}
         run: |
           mkdir build
-          CGO_ENABLED=1 go build -tags with_gvisor -trimpath \
+          CGO_ENABLED=1 GOARCH=amd64 go build -tags with_gvisor -trimpath \
             -ldflags="-X 'github.com/metacubex/mihomo/constant.Version=${VERSION}' -X 'github.com/metacubex/mihomo/constant.BuildTime=$(date)' -w -s" \
             -buildmode=c-shared -o build/libclash.dylib ./bind/desktop
           tar -czf libclash-$VERSION-darwin-amd64.tar.gz build
