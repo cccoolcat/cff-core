@@ -38,7 +38,7 @@ go build -tags with_gvisor -o mihomo .
 macOS (arm64):
 ```bash
 go build -tags with_gvisor -trimpath \
-  -ldflags="-X 'github.com/metacubex/mihomo/constant.Version=dev' -w -s" \
+  -ldflags="-X 'github.com/metacubex/mihomo/constant.Version=1.19.20' -w -s" \
   -buildmode=c-shared \
   -o libclash.dylib ./bind/desktop
 ```
@@ -46,7 +46,7 @@ go build -tags with_gvisor -trimpath \
 macOS (amd64):
 ```bash
 CGO_ENABLED=1 GOARCH=amd64 go build -tags with_gvisor -trimpath \
-  -ldflags="-X 'github.com/metacubex/mihomo/constant.Version=dev' -w -s" \
+  -ldflags="-X 'github.com/metacubex/mihomo/constant.Version=1.19.20' -w -s" \
   -buildmode=c-shared \
   -o libclash.dylib ./bind/desktop
 ```
@@ -61,7 +61,7 @@ go install src.techknowlogick.com/xgo@latest
 Windows (amd64):
 ```bash
 xgo --targets=windows/amd64 -trimpath \
-  -ldflags="-X 'github.com/metacubex/mihomo/constant.Version=dev' -w -s" \
+  -ldflags="-X 'github.com/metacubex/mihomo/constant.Version=1.19.20' -w -s" \
   -tags="with_gvisor" -buildmode=c-shared \
   -out=build/libclash.dll ./bind/desktop
 ```
@@ -69,7 +69,7 @@ xgo --targets=windows/amd64 -trimpath \
 Linux (amd64 / arm64):
 ```bash
 xgo --targets=linux/amd64 -trimpath \
-  -ldflags="-X 'github.com/metacubex/mihomo/constant.Version=dev' -w -s" \
+  -ldflags="-X 'github.com/metacubex/mihomo/constant.Version=1.19.20' -w -s" \
   -tags="with_gvisor" -buildmode=c-shared \
   -out=build/libclash.so ./bind/desktop
 ```
@@ -86,7 +86,7 @@ gomobile init
 Android arm64:
 ```bash
 gomobile bind -trimpath \
-  -ldflags="-X 'github.com/metacubex/mihomo/constant.Version=dev' -w -s" \
+  -ldflags="-X 'github.com/metacubex/mihomo/constant.Version=1.19.20' -w -s" \
   -tags="with_gvisor" \
   -o libclash.aar -target=android/arm64 -androidapi 29 \
   -javapkg com.web3jsq \
@@ -96,7 +96,7 @@ gomobile bind -trimpath \
 Android amd64（模拟器）:
 ```bash
 gomobile bind -trimpath \
-  -ldflags="-X 'github.com/metacubex/mihomo/constant.Version=dev' -w -s" \
+  -ldflags="-X 'github.com/metacubex/mihomo/constant.Version=1.19.20' -w -s" \
   -tags="with_gvisor" \
   -o libclash.aar -target=android/amd64 -androidapi 29 \
   -javapkg com.web3jsq \
@@ -108,7 +108,7 @@ gomobile bind -trimpath \
 需要 macOS + Xcode：
 ```bash
 gomobile bind -trimpath \
-  -ldflags="-X 'github.com/metacubex/mihomo/constant.Version=dev' -w -s" \
+  -ldflags="-X 'github.com/metacubex/mihomo/constant.Version=1.19.20' -w -s" \
   -tags="with_gvisor" \
   -o libclash.xcframework -target=ios \
   github.com/metacubex/mihomo/bind/mobile
