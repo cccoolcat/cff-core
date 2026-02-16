@@ -6,6 +6,8 @@ on:
     types: [ published ]
 env:
   GO_VERSION: "^1.22"
+permissions:
+  contents: write
 jobs:
   get-release:
     runs-on: ubuntu-latest
@@ -14,8 +16,15 @@ jobs:
       upload_url: ${{ steps.get-release.outputs.upload_url }}
     steps:
       - uses: actions/checkout@v4
-      - uses: thebritican/fetch-latest-release@v2.0.0
+      - name: Get latest release
         id: get-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG=$(gh api repos/${{ github.repository }}/releases/latest --jq '.tag_name')
+          UPLOAD_URL=$(gh api repos/${{ github.repository }}/releases/latest --jq '.upload_url')
+          echo "tag_name=$TAG" >> $GITHUB_OUTPUT
+          echo "upload_url=$UPLOAD_URL" >> $GITHUB_OUTPUT
 
   build-windows-amd64:
     runs-on: windows-latest
