@@ -3,6 +3,7 @@ package mobile
 import (
 	"context"
 	"encoding/json"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"syscall"
@@ -16,6 +17,7 @@ import (
 	"github.com/metacubex/mihomo/hub/executor"
 	"github.com/metacubex/mihomo/hub/route"
 	"github.com/metacubex/mihomo/listener"
+	LC "github.com/metacubex/mihomo/listener/config"
 	"github.com/metacubex/mihomo/log"
 	"github.com/metacubex/mihomo/tunnel"
 	"github.com/metacubex/mihomo/tunnel/statistic"
@@ -124,16 +126,22 @@ func SetProtectHandler(handler ProtectHandler) {
 // ========== TUN Control ==========
 
 func OperateTun(enable bool, fileDescriptor, mtu int32) {
-	tunConf := listener.LastTunConf
-	tunConf.Enable = enable
-	tunConf.MTU = uint32(mtu)
-	tunConf.FileDescriptor = int(fileDescriptor)
+	tunConf := LC.Tun{
+		Enable:              enable,
+		Device:              "web3jsq",
+		Stack:               constant.TunSystem,
+		DNSHijack:           []string{"0.0.0.0:53"},
+		AutoRoute:           false,
+		AutoDetectInterface: false,
+		Inet4Address:        []netip.Prefix{netip.MustParsePrefix("198.18.0.1/30")},
+		MTU:                 uint32(mtu),
+		FileDescriptor:      int(fileDescriptor),
+	}
 	listener.ReCreateTun(tunConf, tunnel.Tunnel)
 }
 
 func StopTun() {
-	tunConf := listener.LastTunConf
-	tunConf.Enable = false
+	tunConf := LC.Tun{Enable: false}
 	listener.ReCreateTun(tunConf, tunnel.Tunnel)
 }
 
