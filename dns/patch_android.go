@@ -8,6 +8,11 @@ import (
 
 var systemResolver []dnsClient
 
+func init() {
+	// 默认初始化系统 DNS，避免 resolver 为 nil 导致所有连接失败
+	UpdateSystemDNS([]string{"223.5.5.5:53", "119.29.29.29:53", "8.8.8.8:53"})
+}
+
 func FlushCacheWithDefaultResolver() {
 	resolver.ClearCache()
 	resolver.ResetConnection()
