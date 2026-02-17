@@ -169,7 +169,7 @@ jobs:
           gomobile init
           mkdir build && gomobile bind -trimpath \
             -ldflags="-X 'github.com/metacubex/mihomo/constant.Version=${VERSION}' -X 'github.com/metacubex/mihomo/constant.BuildTime=$(date)' -w -s" \
-            -tags="with_gvisor" -o build/libclash.aar -target=android/arm64 -androidapi 29 \
+            -tags="with_gvisor,cmfa" -o build/libclash.aar -target=android/arm64 -androidapi 29 \
             -javapkg com.web3jsq github.com/metacubex/mihomo/bind/mobile
           tar -czf libclash-$VERSION-android-arm64.tar.gz build
       - name: Upload
@@ -201,7 +201,7 @@ jobs:
           gomobile init
           mkdir build && gomobile bind -trimpath \
             -ldflags="-X 'github.com/metacubex/mihomo/constant.Version=${VERSION}' -X 'github.com/metacubex/mihomo/constant.BuildTime=$(date)' -w -s" \
-            -tags="with_gvisor" -o build/libclash.aar -target=android/amd64 -androidapi 29 \
+            -tags="with_gvisor,cmfa" -o build/libclash.aar -target=android/amd64 -androidapi 29 \
             -javapkg com.web3jsq github.com/metacubex/mihomo/bind/mobile
           tar -czf libclash-$VERSION-android-amd64.tar.gz build
       - name: Upload
