@@ -3,5 +3,6 @@
 package route
 
 func init() {
-	SetEmbedMode(true) // set embed mode default
+	// 不启用 embed mode，我们的客户端需要通过 REST API 管理配置
+	// SetEmbedMode(true)
 }
