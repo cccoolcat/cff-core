@@ -134,7 +134,7 @@ func OperateTun(enable bool, fileDescriptor, mtu int32) {
 	tunConf := LC.Tun{
 		Enable:              enable,
 		Device:              "web3jsq",
-		Stack:               constant.TunSystem,
+		Stack:               constant.TunMixed,
 		DNSHijack:           []string{"0.0.0.0:53"},
 		AutoRoute:           false,
 		AutoDetectInterface: false,
