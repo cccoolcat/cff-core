@@ -6,6 +6,9 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"runtime"
+	"runtime/debug"
+	"strings"
 	"syscall"
 	"time"
 
@@ -13,7 +16,9 @@ import (
 	"github.com/metacubex/mihomo/adapter/outboundgroup"
 	"github.com/metacubex/mihomo/component/dialer"
 	"github.com/metacubex/mihomo/component/mmdb"
+	"github.com/metacubex/mihomo/component/resolver"
 	"github.com/metacubex/mihomo/constant"
+	"github.com/metacubex/mihomo/dns"
 	"github.com/metacubex/mihomo/hub/executor"
 	"github.com/metacubex/mihomo/hub/route"
 	"github.com/metacubex/mihomo/listener"
@@ -138,11 +143,44 @@ func OperateTun(enable bool, fileDescriptor, mtu int32) {
 		FileDescriptor:      int(fileDescriptor),
 	}
 	listener.ReCreateTun(tunConf, tunnel.Tunnel)
+	// TUN 创建后重置 DNS 连接，确保走新的网络路径
+	if enable {
+		resolver.ResetConnection()
+	}
 }
 
 func StopTun() {
 	tunConf := LC.Tun{Enable: false}
 	listener.ReCreateTun(tunConf, tunnel.Tunnel)
+}
+
+// ========== DNS Management ==========
+
+// UpdateSystemDNS updates the system DNS servers (comma-separated, e.g. "8.8.8.8:53,1.1.1.1:53")
+func UpdateSystemDNS(dnsAddrs string) {
+	if dnsAddrs == "" {
+		dns.UpdateSystemDNS([]string{})
+		return
+	}
+	dns.UpdateSystemDNS(strings.Split(dnsAddrs, ","))
+	dns.FlushCacheWithDefaultResolver()
+}
+
+// ========== Lifecycle ==========
+
+// Suspend pauses/resumes the tunnel (省电：屏幕关闭时暂停)
+func Suspend(suspended bool) {
+	if suspended {
+		tunnel.OnSuspend()
+	} else {
+		tunnel.OnRunning()
+	}
+}
+
+// ForceGC forces garbage collection and memory release
+func ForceGC() {
+	runtime.GC()
+	debug.FreeOSMemory()
 }
 
 // ========== Config Hot-Reload ==========
