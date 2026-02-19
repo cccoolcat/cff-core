@@ -1,6 +1,6 @@
 module github.com/metacubex/mihomo
 
-go 1.20
+go 1.25.0
 
 require (
 	filippo.io/edwards25519 v1.1.0
@@ -62,11 +62,11 @@ require (
 	github.com/mdlayher/netlink v1.7.2
 	github.com/miekg/dns v1.1.63
 	github.com/oschwald/maxminddb-golang v1.12.0
-	golang.org/x/crypto v0.33.0
+	golang.org/x/crypto v0.48.0
 	golang.org/x/exp v0.0.0-20240904232852-e7e105dedf7e
-	golang.org/x/net v0.35.0
-	golang.org/x/sync v0.11.0
-	golang.org/x/sys v0.30.0
+	golang.org/x/net v0.50.0
+	golang.org/x/sync v0.19.0
+	golang.org/x/sys v0.41.0
 	google.golang.org/protobuf v1.34.2
 )
 
@@ -111,8 +111,8 @@ require (
 	github.com/vishvananda/netns v0.0.4 // indirect
 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
 	gitlab.com/yawning/bsaes.git v0.0.0-20190805113838-0a714cd429ec // indirect
-	golang.org/x/mod v0.20.0 // indirect
-	golang.org/x/text v0.22.0 // indirect
+	golang.org/x/mod v0.33.0 // indirect
+	golang.org/x/text v0.34.0 // indirect
 	golang.org/x/time v0.10.0 // indirect
-	golang.org/x/tools v0.24.0 // indirect
+	golang.org/x/tools v0.42.0 // indirect
 )

@@ -134,7 +134,7 @@ func OperateTun(enable bool, fileDescriptor, mtu int32) {
 	tunConf := LC.Tun{
 		Enable:              enable,
 		Device:              "web3jsq",
-		Stack:               constant.TunMixed,
+		Stack:               constant.TunGvisor,
 		DNSHijack:           []string{"0.0.0.0:53"},
 		AutoRoute:           false,
 		AutoDetectInterface: false,
@@ -142,6 +142,7 @@ func OperateTun(enable bool, fileDescriptor, mtu int32) {
 		MTU:                 uint32(mtu),
 		FileDescriptor:      int(fileDescriptor),
 	}
+	log.Infoln("[Mobile] OperateTun enable=%v fd=%d mtu=%d", enable, fileDescriptor, mtu)
 	listener.ReCreateTun(tunConf, tunnel.Tunnel)
 	// TUN 创建后重置 DNS 连接，确保走新的网络路径
 	if enable {
